@@ -41,47 +41,96 @@ export class ApexAgent {
 
   /**
    * Implementation for Real OpenF1 API calls.
+   * Updates driver data using the session with the highest session_key (latest race).
    */
   private async fetchRealData(driverId: string, trackId: string): Promise<DriverStats> {
     try {
-      // 1. Attempt to hit the Analytics Endpoint
-      // Note: On the public OpenF1 API, this specific endpoint might not exist, triggering the fallback.
-      const endpoint = `${OPENF1_BASE_URL}/analytics/driver-stats?driver=${driverId}&track=${trackId}`;
+      // 1. Fetch all sessions to find the latest Race
+      // We use 'session_type=Race' to get meaningful form data from main events
+      console.log("[APEX] Fetching session registry...");
+      const sessionsResponse = await fetch(`${OPENF1_BASE_URL}/sessions?session_type=Race`);
       
-      console.log(`[APEX] Requesting: ${endpoint}`);
+      if (!sessionsResponse.ok) {
+        throw new Error(`OpenF1 Session Registry Error: ${sessionsResponse.status}`);
+      }
       
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-          // Authorization header removed as requested
-        }
-      });
-
-      if (!response.ok) {
-        // If 404, it means the specific analytics endpoint doesn't exist on this server. 
-        // We will try a fallback to verify connectivity to the standard OpenF1 API.
-        if (response.status === 404) {
-           console.warn("[APEX] Analytics endpoint not found. Verifying connectivity to raw OpenF1 sessions...");
-           return this.fetchRawOpenF1Fallback(driverId, trackId);
-        }
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      const sessions = await sessionsResponse.json();
+      if (!sessions || sessions.length === 0) {
+        throw new Error("No race sessions found in OpenF1 registry.");
       }
 
-      const data = await response.json();
+      // Sort by session_key descending to get the absolute latest session
+      const latestSession = sessions.sort((a: any, b: any) => b.session_key - a.session_key)[0];
+      const latestSessionKey = latestSession.session_key;
+
+      console.log(`[APEX] Latest Session Identified: ${latestSessionKey} - ${latestSession.location} (${latestSession.year})`);
+
+      // 2. Fetch Driver Details for this session to get their specific driver_number
+      // We capitalize the ID to match OpenF1's last_name format (e.g. 'verstappen' -> 'Verstappen')
+      const formattedName = driverId.charAt(0).toUpperCase() + driverId.slice(1);
+      
+      const driverResponse = await fetch(`${OPENF1_BASE_URL}/drivers?session_key=${latestSessionKey}&last_name=${formattedName}`);
+      const driverDataList = await driverResponse.json();
+
+      let recentFormScore = 0;
+      let driverFoundInLatest = false;
+
+      // 3. Calculate Recent Form based on the latest race result
+      if (driverDataList && driverDataList.length > 0) {
+        const driverInfo = driverDataList[0];
+        const driverNumber = driverInfo.driver_number;
+        driverFoundInLatest = true;
+
+        // Fetch Position data for this driver in the latest session
+        // The API returns a stream of position updates; the last one is the finishing position.
+        const positionResponse = await fetch(`${OPENF1_BASE_URL}/position?session_key=${latestSessionKey}&driver_number=${driverNumber}`);
+        const positions = await positionResponse.json();
+
+        if (positions && positions.length > 0) {
+           const finalPosition = positions[positions.length - 1].position;
+           console.log(`[APEX] ${formattedName} finished P${finalPosition} in the latest race.`);
+           
+           // Calculate Form Score: P1 = 10, P20 = ~1. 
+           // Formula: 10 - ((Position - 1) * 0.45)
+           // P1 -> 10, P5 -> 8.2, P10 -> 5.95, P20 -> 1.45
+           recentFormScore = Math.max(1, 10 - ((finalPosition - 1) * 0.45));
+        } else {
+           // Driver exists but no position data (DNF or issue), fallback to average
+           recentFormScore = 5;
+        }
+      } else {
+        console.warn(`[APEX] Driver ${formattedName} not found in session ${latestSessionKey}. Using Tier fallback.`);
+        // Fallback for drivers not in the latest race (reserves, etc.)
+        const tier = TIERS[driverId] || 3;
+        recentFormScore = 10 - (tier * 1.5);
+      }
+
+      // 4. Determine Historical Score
+      // While we have real form data, fetching historical data for the specific *selected* track 
+      // requires searching years of sessions. For responsiveness, we stick to the Tier model 
+      // for historical stats but add variance.
+      const tier = TIERS[driverId] || 3;
+      let historicalScore = 10 - (tier * 1.5);
+      
+      // Add track-specific adjustments (Simulated logic mixed with real form)
+      if (trackId === 'monza' && (driverId === 'leclerc' || driverId === 'hamilton')) historicalScore += 1;
+      if (trackId === 'zandvoort' && driverId === 'verstappen') historicalScore += 1.5;
+      
+      // Clamp scores
+      historicalScore = Math.min(9.8, Math.max(2, historicalScore));
+      recentFormScore = Math.min(9.9, Math.max(1, recentFormScore));
 
       return {
-        driverId: data.driver_id || driverId,
-        trackId: data.track_id || trackId,
-        historicalScore: this.normalizeScore(data.historical_score), 
-        recentFormScore: this.normalizeScore(data.current_form_score),
-        totalRacesAtTrack: Number(data.races_count || 0),
-        winsAtTrack: Number(data.wins || 0)
+        driverId: driverId,
+        trackId: trackId,
+        historicalScore: Number(historicalScore.toFixed(1)),
+        recentFormScore: Number(recentFormScore.toFixed(1)),
+        totalRacesAtTrack: 0, // Not fetching historical count to save API calls
+        winsAtTrack: 0
       };
 
     } catch (error: any) {
       console.error("Critical Failure in Data Fetching Tool:", error);
-      // Fallback to simulation if the network request completely fails (e.g. offline)
       console.log("[APEX] Network failure. Falling back to internal simulation model.");
       return this.fetchMockData(driverId, trackId);
     }
@@ -92,14 +141,8 @@ export class ApexAgent {
    * Checks if we can reach the /sessions endpoint.
    */
   private async fetchRawOpenF1Fallback(driverId: string, trackId: string): Promise<DriverStats> {
-     // Fetch the latest session to prove connectivity.
-     // No API key required for this public endpoint.
      const response = await fetch(`${OPENF1_BASE_URL}/sessions?limit=1`);
-     
      if(response.ok) {
-        console.log("[APEX] Connection to OpenF1 Direct URL successful!");
-        // We proved connection, but since raw telemetry processing for win probability 
-        // is too heavy for the client, we generate accurate stats based on the verified driver/track.
         return this.fetchMockData(driverId, trackId);
      }
      throw new Error("Could not connect to OpenF1 fallback endpoint.");
@@ -107,7 +150,7 @@ export class ApexAgent {
 
   private normalizeScore(val: any): number {
     const num = Number(val);
-    if (isNaN(num)) return 5; // Default average
+    if (isNaN(num)) return 5; 
     return Math.min(10, Math.max(0, num));
   }
 
