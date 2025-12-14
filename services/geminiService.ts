@@ -7,7 +7,9 @@ export const generateRaceAnalysis = async (
   result: PredictionResult
 ): Promise<string> => {
   try {
-    const apiKey = process.env.API_KEY;
+    // Trim whitespace to prevent "API key not valid" errors due to copy-paste issues
+    const apiKey = process.env.API_KEY?.trim();
+    
     if (!apiKey) {
       return "Agent Insight: API Key missing. Unable to generate narrative analysis, but the statistical prediction remains valid.";
     }
@@ -39,7 +41,21 @@ export const generateRaceAnalysis = async (
     return response.text || "Analysis complete.";
   } catch (error: any) {
     console.error("Gemini analysis failed:", error);
-    // Return the actual error message to help the user debug
-    return `Agent Insight: Tactical analysis system offline. (Error: ${error.message || 'Unknown'})`;
+    
+    // Attempt to extract a cleaner message if it's a JSON error string (common with Google APIs)
+    let cleanMessage = error.message || 'Unknown Error';
+    try {
+      if (cleanMessage.includes('{')) {
+        const jsonPart = cleanMessage.substring(cleanMessage.indexOf('{'));
+        const jsonError = JSON.parse(jsonPart);
+        if (jsonError.error?.message) {
+          cleanMessage = jsonError.error.message;
+        }
+      }
+    } catch (e) {
+      // Parsing failed, stick to original message
+    }
+
+    return `Agent Insight: Tactical analysis system offline. (${cleanMessage})`;
   }
 };
