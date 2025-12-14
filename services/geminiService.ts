@@ -37,8 +37,9 @@ export const generateRaceAnalysis = async (
     });
 
     return response.text || "Analysis complete.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini analysis failed:", error);
-    return "Agent Insight: Tactical analysis system offline. Statistical model remains accurate.";
+    // Return the actual error message to help the user debug
+    return `Agent Insight: Tactical analysis system offline. (Error: ${error.message || 'Unknown'})`;
   }
 };
