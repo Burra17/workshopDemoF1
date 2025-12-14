@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Cpu, ChevronRight, BarChart2, Zap, MapPin, Radio, Wifi, Loader2 } from 'lucide-react';
 import { Driver, Track, AgentState, PredictionResult } from './types';
-import { TRACKS } from './constants';
 import { apexAgent } from './services/f1Agent';
 import { generateRaceAnalysis } from './services/geminiService';
 import { AnalysisChart } from './components/AnalysisChart';
 
 const App: React.FC = () => {
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [agentState, setAgentState] = useState<AgentState>(AgentState.IDLE);
@@ -17,20 +17,27 @@ const App: React.FC = () => {
 
   const isLiveMode = apexAgent.isLiveMode;
 
-  // Initial Data Load
+  // Initial Data Load (Drivers + Tracks)
   useEffect(() => {
-    const loadDrivers = async () => {
+    const loadF1Data = async () => {
       try {
-        const grid = await apexAgent.getDrivers();
-        setDrivers(grid);
+        setIsLoadingData(true);
+        // Execute fetching in parallel for speed
+        const [gridData, calendarData] = await Promise.all([
+          apexAgent.getDrivers(),
+          apexAgent.getTracks()
+        ]);
+        
+        setDrivers(gridData);
+        setTracks(calendarData);
       } catch (error) {
-        console.error("Failed to load initial grid", error);
+        console.error("Failed to load F1 data", error);
         setErrorMessage("Failed to connect to OpenF1 Network. Please check your internet connection.");
       } finally {
-        setIsLoadingDrivers(false);
+        setIsLoadingData(false);
       }
     };
-    loadDrivers();
+    loadF1Data();
   }, []);
 
   const handleRunSimulation = async () => {
@@ -113,20 +120,20 @@ const App: React.FC = () => {
                 Select Driver
               </label>
               <span className="text-xs text-slate-600 font-mono">
-                {isLoadingDrivers ? 'CONNECTING...' : `${drivers.length} ACTIVE`}
+                {isLoadingData ? 'CONNECTING...' : `${drivers.length} ACTIVE`}
               </span>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-2 custom-scrollbar flex-1 bg-slate-900/30 p-2 rounded-2xl border border-slate-800/50">
               
-              {isLoadingDrivers && (
+              {isLoadingData && (
                 <div className="col-span-2 flex flex-col items-center justify-center h-full text-slate-500 gap-3">
                    <Loader2 className="w-8 h-8 animate-spin text-red-600" />
-                   <div className="text-xs font-mono">SYNCING WITH OPENF1...</div>
+                   <div className="text-xs font-mono">SYNCING GRID...</div>
                 </div>
               )}
 
-              {!isLoadingDrivers && drivers.map(driver => (
+              {!isLoadingData && drivers.map(driver => (
                 <button
                   key={driver.id}
                   onClick={() => setSelectedDriver(driver)}
@@ -159,11 +166,21 @@ const App: React.FC = () => {
                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                  Select Circuit
               </label>
-              <span className="text-xs text-slate-600 font-mono">{TRACKS.length} CONFIRMED</span>
+              <span className="text-xs text-slate-600 font-mono">
+                {isLoadingData ? 'CONNECTING...' : `${tracks.length} CONFIRMED`}
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-2 custom-scrollbar flex-1 bg-slate-900/30 p-2 rounded-2xl border border-slate-800/50">
-              {TRACKS.map(track => (
+              
+              {isLoadingData && (
+                <div className="col-span-2 flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+                   <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                   <div className="text-xs font-mono">SYNCING CALENDAR...</div>
+                </div>
+              )}
+
+              {!isLoadingData && tracks.map(track => (
                 <button
                   key={track.id}
                   onClick={() => setSelectedTrack(track)}

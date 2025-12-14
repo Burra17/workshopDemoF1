@@ -1,4 +1,4 @@
-import { Driver, DriverStats, PredictionResult } from '../types';
+import { Driver, Track, DriverStats, PredictionResult } from '../types';
 
 // Configuration for Direct URL Access
 const OPENF1_BASE_URL = 'https://api.openf1.org/v1';
@@ -79,6 +79,59 @@ export class ApexAgent {
   }
 
   /**
+   * Fetches the official calendar for the latest season.
+   */
+  public async getTracks(): Promise<Track[]> {
+    try {
+      console.log("[APEX] Fetching active circuit calendar...");
+      // Fetch only Race sessions to build the calendar
+      const response = await fetch(`${OPENF1_BASE_URL}/sessions?session_type=Race`);
+      if (!response.ok) throw new Error("Failed to fetch sessions for tracks");
+      
+      const sessions = await response.json();
+      if (!sessions.length) return [];
+
+      // Find latest year available in the data
+      const years = sessions.map((s: any) => s.year);
+      const latestYear = Math.max(...years);
+
+      // Filter for sessions in the latest year and sort by date
+      const currentSeasonSessions = sessions
+        .filter((s: any) => s.year === latestYear)
+        .sort((a: any, b: any) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+
+      // Deduplicate circuits using circuit_key
+      const uniqueTracks = new Map<string, Track>();
+
+      currentSeasonSessions.forEach((s: any) => {
+        // Some sessions might be pre-season testing, filter by having a valid circuit_key
+        if (s.circuit_key && !uniqueTracks.has(s.circuit_key)) {
+          // Use circuit_short_name (e.g., "Monaco") or fallback to location
+          const name = s.circuit_short_name || s.location;
+          const location = s.country_name || s.location;
+          
+          uniqueTracks.set(s.circuit_key, {
+            // Normalize ID for consistency with stats logic (lowercase, underscore)
+            id: name.toLowerCase().replace(/\s/g, '_'),
+            name: name,
+            location: location,
+            // Generate a consistent placeholder image based on location
+            image: `https://picsum.photos/seed/${location.replace(/\s/g, '')}f1/400/200`
+          });
+        }
+      });
+
+      const tracks = Array.from(uniqueTracks.values());
+      console.log(`[APEX] Calendar loaded: ${tracks.length} circuits for season ${latestYear}`);
+      return tracks;
+
+    } catch (error) {
+      console.error("[APEX] Error loading tracks:", error);
+      return [];
+    }
+  }
+
+  /**
    * Tool A: Data Fetching
    * Attempts to fetch real data from the Direct URL.
    */
@@ -113,8 +166,6 @@ export class ApexAgent {
       console.log(`[APEX] Latest Session Identified: ${latestSessionKey} - ${latestSession.location} (${latestSession.year})`);
 
       // 2. Fetch Driver Details for this session
-      // We attempt to capitalize the ID to match OpenF1's last_name format (e.g. 'verstappen' -> 'Verstappen')
-      // Note: This relies on the ID being the surname.
       const formattedName = driverId.charAt(0).toUpperCase() + driverId.slice(1);
       
       const driverResponse = await fetch(`${OPENF1_BASE_URL}/drivers?session_key=${latestSessionKey}&last_name=${formattedName}`);
@@ -156,8 +207,11 @@ export class ApexAgent {
       const tier = TIERS[driverId] || 3;
       let historicalScore = 10 - (tier * 1.5);
       
-      if (trackId === 'monza' && (driverId === 'leclerc' || driverId === 'hamilton')) historicalScore += 1;
-      if (trackId === 'zandvoort' && driverId === 'verstappen') historicalScore += 1.5;
+      // Simple location-based bonuses
+      // Note: We check against the dynamic trackId which is lowercase short name
+      if (trackId.includes('monza') && (driverId === 'leclerc' || driverId === 'hamilton')) historicalScore += 1;
+      if (trackId.includes('zandvoort') && driverId === 'verstappen') historicalScore += 1.5;
+      if (trackId.includes('silverstone') && (driverId === 'hamilton')) historicalScore += 1;
       
       historicalScore = Math.min(9.8, Math.max(2, historicalScore));
       recentFormScore = Math.min(9.9, Math.max(1, recentFormScore));
