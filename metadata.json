@@ -1,0 +1,5 @@
+{
+  "name": "APEX F1 - Predictive Agent",
+  "description": "An Agentic Workflow dashboard predicting Formula 1 driver win probabilities using historical data and current form analysis.",
+  "requestFramePermissions": []
+}
