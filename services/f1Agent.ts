@@ -1,4 +1,4 @@
-import { DriverStats, PredictionResult } from '../types';
+import { Driver, DriverStats, PredictionResult } from '../types';
 
 // Configuration for Direct URL Access
 const OPENF1_BASE_URL = 'https://api.openf1.org/v1';
@@ -25,6 +25,57 @@ export class ApexAgent {
   
   public get isLiveMode(): boolean {
     return true;
+  }
+
+  /**
+   * Fetches the list of drivers from the latest available Race session.
+   * This ensures the UI is always synced with the actual data source.
+   */
+  public async getDrivers(): Promise<Driver[]> {
+    try {
+      console.log("[APEX] Fetching latest grid configuration...");
+      
+      // 1. Get the latest session
+      const sessionsResponse = await fetch(`${OPENF1_BASE_URL}/sessions?session_type=Race`);
+      if (!sessionsResponse.ok) throw new Error("Failed to fetch sessions");
+      
+      const sessions = await sessionsResponse.json();
+      const latestSession = sessions.sort((a: any, b: any) => b.session_key - a.session_key)[0];
+      
+      if (!latestSession) throw new Error("No sessions found");
+      
+      // 2. Get drivers for that session
+      const driversResponse = await fetch(`${OPENF1_BASE_URL}/drivers?session_key=${latestSession.session_key}`);
+      if (!driversResponse.ok) throw new Error("Failed to fetch drivers");
+      
+      const driversData = await driversResponse.json();
+      
+      // 3. Map and Deduplicate (Drivers can appear multiple times in the stream)
+      const uniqueDrivers = new Map<string, Driver>();
+      
+      driversData.forEach((d: any) => {
+        // Ensure we have a valid last name to use as ID
+        if (d.last_name && d.driver_number && !uniqueDrivers.has(d.last_name)) {
+          uniqueDrivers.set(d.last_name, {
+            id: d.last_name.toLowerCase(), // Use lowercase last name as ID for consistency
+            name: d.full_name || `${d.first_name} ${d.last_name}`,
+            team: d.team_name || "Unknown Team",
+            // Use API headshot or a fallback UI avatar
+            image: d.headshot_url || `https://ui-avatars.com/api/?name=${d.first_name}+${d.last_name}&background=0f172a&color=fff`
+          });
+        }
+      });
+
+      // Convert Map to Array and sort by Team Name for clean UI
+      const sortedDrivers = Array.from(uniqueDrivers.values()).sort((a, b) => a.team.localeCompare(b.team));
+      
+      console.log(`[APEX] Grid loaded: ${sortedDrivers.length} drivers found in session ${latestSession.session_key}`);
+      return sortedDrivers;
+
+    } catch (error) {
+      console.error("[APEX] Error loading grid:", error);
+      return [];
+    }
   }
 
   /**
@@ -62,6 +113,8 @@ export class ApexAgent {
       console.log(`[APEX] Latest Session Identified: ${latestSessionKey} - ${latestSession.location} (${latestSession.year})`);
 
       // 2. Fetch Driver Details for this session
+      // We attempt to capitalize the ID to match OpenF1's last_name format (e.g. 'verstappen' -> 'Verstappen')
+      // Note: This relies on the ID being the surname.
       const formattedName = driverId.charAt(0).toUpperCase() + driverId.slice(1);
       
       const driverResponse = await fetch(`${OPENF1_BASE_URL}/drivers?session_key=${latestSessionKey}&last_name=${formattedName}`);
@@ -120,8 +173,6 @@ export class ApexAgent {
 
     } catch (error: any) {
       console.error("Critical Failure in Data Fetching Tool:", error);
-      // MOCK FALLBACK REMOVED to satisfy "Verify connection" request.
-      // This will now cause the UI to show the error state.
       throw error; 
     }
   }

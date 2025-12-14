@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { Activity, Cpu, ChevronRight, BarChart2, Zap, MapPin, Radio, Wifi } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Activity, Cpu, ChevronRight, BarChart2, Zap, MapPin, Radio, Wifi, Loader2 } from 'lucide-react';
 import { Driver, Track, AgentState, PredictionResult } from './types';
-import { DRIVERS, TRACKS } from './constants';
+import { TRACKS } from './constants';
 import { apexAgent } from './services/f1Agent';
 import { generateRaceAnalysis } from './services/geminiService';
 import { AnalysisChart } from './components/AnalysisChart';
 
 const App: React.FC = () => {
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [agentState, setAgentState] = useState<AgentState>(AgentState.IDLE);
@@ -14,6 +16,22 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isLiveMode = apexAgent.isLiveMode;
+
+  // Initial Data Load
+  useEffect(() => {
+    const loadDrivers = async () => {
+      try {
+        const grid = await apexAgent.getDrivers();
+        setDrivers(grid);
+      } catch (error) {
+        console.error("Failed to load initial grid", error);
+        setErrorMessage("Failed to connect to OpenF1 Network. Please check your internet connection.");
+      } finally {
+        setIsLoadingDrivers(false);
+      }
+    };
+    loadDrivers();
+  }, []);
 
   const handleRunSimulation = async () => {
     if (!selectedDriver || !selectedTrack) return;
@@ -61,7 +79,7 @@ const App: React.FC = () => {
             <div>
               <h1 className="text-xl font-bold tracking-tight text-white">APEX F1</h1>
               <div className="flex items-center gap-2">
-                 <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">2025 Season Predictor</p>
+                 <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Live Strategy Agent</p>
                  <span className="text-slate-700">|</span>
                  {isLiveMode ? (
                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -94,11 +112,21 @@ const App: React.FC = () => {
                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
                 Select Driver
               </label>
-              <span className="text-xs text-slate-600 font-mono">{DRIVERS.length} ACTIVE</span>
+              <span className="text-xs text-slate-600 font-mono">
+                {isLoadingDrivers ? 'CONNECTING...' : `${drivers.length} ACTIVE`}
+              </span>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-2 custom-scrollbar flex-1 bg-slate-900/30 p-2 rounded-2xl border border-slate-800/50">
-              {DRIVERS.map(driver => (
+              
+              {isLoadingDrivers && (
+                <div className="col-span-2 flex flex-col items-center justify-center h-full text-slate-500 gap-3">
+                   <Loader2 className="w-8 h-8 animate-spin text-red-600" />
+                   <div className="text-xs font-mono">SYNCING WITH OPENF1...</div>
+                </div>
+              )}
+
+              {!isLoadingDrivers && drivers.map(driver => (
                 <button
                   key={driver.id}
                   onClick={() => setSelectedDriver(driver)}
@@ -319,7 +347,7 @@ const App: React.FC = () => {
             
             <div className="text-center pt-8 pb-4 opacity-40">
               <p className="text-[10px] font-mono uppercase tracking-widest">
-                APEX F1 AGENT v2.0 | 2025 GRID DATA | POWERED BY GEMINI FLASH
+                APEX F1 AGENT v2.0 | LIVE GRID DATA | POWERED BY GEMINI FLASH
               </p>
             </div>
 

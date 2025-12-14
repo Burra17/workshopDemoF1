@@ -1,37 +1,7 @@
-import { Driver, Track } from './types';
+import { Track } from './types';
 
-export const DRIVERS: Driver[] = [
-  // Red Bull Racing
-  { id: 'verstappen', name: 'Max Verstappen', team: 'Red Bull Racing', image: 'https://picsum.photos/seed/max/200/200' },
-  { id: 'perez', name: 'Sergio Perez', team: 'Red Bull Racing', image: 'https://picsum.photos/seed/checo/200/200' },
-  // Ferrari
-  { id: 'leclerc', name: 'Charles Leclerc', team: 'Ferrari', image: 'https://picsum.photos/seed/charles/200/200' },
-  { id: 'hamilton', name: 'Lewis Hamilton', team: 'Ferrari', image: 'https://picsum.photos/seed/lewis/200/200' },
-  // McLaren
-  { id: 'norris', name: 'Lando Norris', team: 'McLaren', image: 'https://picsum.photos/seed/lando/200/200' },
-  { id: 'piastri', name: 'Oscar Piastri', team: 'McLaren', image: 'https://picsum.photos/seed/oscar/200/200' },
-  // Mercedes
-  { id: 'russell', name: 'George Russell', team: 'Mercedes', image: 'https://picsum.photos/seed/george/200/200' },
-  { id: 'antonelli', name: 'Kimi Antonelli', team: 'Mercedes', image: 'https://picsum.photos/seed/kimi/200/200' },
-  // Aston Martin
-  { id: 'alonso', name: 'Fernando Alonso', team: 'Aston Martin', image: 'https://picsum.photos/seed/nando/200/200' },
-  { id: 'stroll', name: 'Lance Stroll', team: 'Aston Martin', image: 'https://picsum.photos/seed/lance/200/200' },
-  // Williams
-  { id: 'albon', name: 'Alex Albon', team: 'Williams', image: 'https://picsum.photos/seed/alex/200/200' },
-  { id: 'sainz', name: 'Carlos Sainz', team: 'Williams', image: 'https://picsum.photos/seed/carlos/200/200' },
-  // Alpine
-  { id: 'gasly', name: 'Pierre Gasly', team: 'Alpine', image: 'https://picsum.photos/seed/pierre/200/200' },
-  { id: 'doohan', name: 'Jack Doohan', team: 'Alpine', image: 'https://picsum.photos/seed/jack/200/200' },
-  // RB
-  { id: 'tsunoda', name: 'Yuki Tsunoda', team: 'RB', image: 'https://picsum.photos/seed/yuki/200/200' },
-  { id: 'lawson', name: 'Liam Lawson', team: 'RB', image: 'https://picsum.photos/seed/liam/200/200' },
-  // Haas
-  { id: 'ocon', name: 'Esteban Ocon', team: 'Haas', image: 'https://picsum.photos/seed/esteban/200/200' },
-  { id: 'bearman', name: 'Oliver Bearman', team: 'Haas', image: 'https://picsum.photos/seed/ollie/200/200' },
-  // Sauber
-  { id: 'hulkenberg', name: 'Nico Hulkenberg', team: 'Sauber', image: 'https://picsum.photos/seed/nico/200/200' },
-  { id: 'bortoleto', name: 'Gabriel Bortoleto', team: 'Sauber', image: 'https://picsum.photos/seed/gabriel/200/200' },
-];
+// Drivers are now fetched dynamically from OpenF1 in App.tsx to ensure accuracy.
+// const DRIVERS = [...] removed.
 
 export const TRACKS: Track[] = [
   { id: 'melbourne', name: 'Albert Park', location: 'Australia', image: 'https://picsum.photos/seed/aus/400/200' },
